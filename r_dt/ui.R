@@ -1,4 +1,4 @@
 fluidPage(
-  DT::dataTableOutput('x1'),
-  textOutput("text")
+  DTOutput('x1'),
+  DTOutput("text")
 )
