@@ -2,7 +2,11 @@ library(shiny)
 library(DT)
 
 server <- function(input, output, session) {
-  x <- iris
+  
+  observeEvent(input$action, {
+    x <- iris  
+  })
+  
   
  # this reactive df will stay current w/ the changes made to DT `x_1`
   y <- reactive({
@@ -10,8 +14,9 @@ server <- function(input, output, session) {
     x
   })
   
-  x$Date <- Sys.time() + seq_len(nrow(x))
+  #x$Date <- Sys.time() + seq_len(nrow(x))
   output$x1 <- DT::renderDataTable({
+    if(exists("x"))
     datatable(x, selection = 'single', editable = TRUE, rownames = FALSE)
   })
   

@@ -1,4 +1,5 @@
 fluidPage(
-  DTOutput('x1'),
-  DTOutput("text")
+  shiny::actionButton("action", "run"),
+  DT::DTOutput('x1'),
+  DT:::DTOutput("text")
 )
