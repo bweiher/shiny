@@ -1,7 +1,7 @@
-# sidebar
+# sidebar ----
 sidebar <- dashboardSidebar(
   sidebarMenu(
-    id = "tab",
+    id = "tab", # input$tab
     menuItem("Welcome Page", tabName = "welcome", icon = icon("user", lib = "glyphicon")),
     menuItem("Info",
       tabName = "info_tab", icon = icon("list"),
@@ -11,21 +11,17 @@ sidebar <- dashboardSidebar(
   )
 )
 
-# body
+# body ----
 body <- dashboardBody(
   fluidPage(
     tags$head(
-      # tags$script(src="mixpanel.js"),
       tags$link(rel = "stylesheet", type = "text/css", href = "custom.css")
     ),
-
     tabItems(
-      # welcome tab -----
       tabItem(
-        tabName = "welcome",
+        tabName = "welcome", # never used
         tags$h1("Homepage")
       ),
-      # info tab -----
       tabItem(
         tabName = "subitem_1",
         box(color = "purple", width = 12, solidHeader = TRUE, title = "Box Title"),
@@ -38,20 +34,22 @@ body <- dashboardBody(
       tabItem(
         tabName = "subitem_2",
         tags$h3("Sample Link"),
-        tags$h5(tags$li("", tags$a(href = "https://url.com", "Link Name"), ""))
+        tags$li("", tags$a(href = "https://google.com", "Google"), "")
       )
     )
   )
 )
 
+# header ----
 header <- dashboardHeader(
-  title = "Dashboard Title",
-  dropdownMenuOutput("messageMenu")
+  title = "Dashboard Title"
+  # ,
+  # dropdownMenuOutput("messageMenu")
 )
 
 
 
-# assemble components ----
+# assemble  ----
 ui <- dashboardPage(
   skin = "purple",
   title = "ShinyDashboard Template",
