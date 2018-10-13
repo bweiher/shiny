@@ -1,0 +1,306 @@
+---
+title: "Ping Pong Records"
+output: 
+  flexdashboard::flex_dashboard:
+    theme: flatly
+    orientation: rows
+runtime: shiny
+---
+
+```{r setup, include=FALSE}
+library(flexdashboard)
+library(shiny)
+library(tidyverse)
+library(DT)
+library(data.table)
+library(highcharter)
+```
+
+
+Dashboard
+=======================================================================
+
+```{r}
+
+# file new game based off of user input
+observeEvent(input$file_game, {
+  
+  if(input$ben_score > 0 || input$dylan_score > 0) {
+    
+  new_game <- tibble(
+    ben_score =   input$ben_score,
+    dylan_score = input$dylan_score
+  ) %>% 
+    mutate(
+      winner = case_when(
+        ben_score > dylan_score ~ 'Ben', 
+        ben_score < dylan_score ~ 'Dylan',
+        ben_score == dylan_score ~ as.character(NA)),
+    date = Sys.Date(), 
+    time = Sys.time()
+    ) %>% 
+      select(date, winner, everything())
+  
+  # TODO replace with DB append
+    bind_rows(read_csv('df.csv'), new_game) %>% 
+    write_csv('df.csv')
+  
+  }
+ # }
+})
+
+# update data based off of new game filed
+updated_data <- reactive({
+  
+  
+  if(input$file_game) {
+    # TODO replace with DB QUERY
+    read_csv('df.csv') %>% 
+    arrange(desc(time)) %>% 
+    select(-time)
+  
+  } else {
+    # TODO replace with DB QUERY
+    read_csv('df.csv') %>% 
+    arrange(desc(time)) %>% 
+    select(-time)
+  }
+  
+})
+```
+
+
+
+Row 
+-----------------------------------------------------------------------
+
+### Games Played {.value-box}
+
+```{r}
+flexdashboard::renderValueBox({
+  
+  val <- updated_data() %>%
+    count() %>%
+    pull(n)
+  
+  valueBox(value =  val,
+           caption = 'Games Played')  
+  
+})
+
+```
+
+### Ben's Winning Percentage {.value-box}
+
+```{r}
+
+flexdashboard::renderValueBox({
+  
+  share <- updated_data() %>%
+    group_by(winner) %>% 
+    count() %>% 
+    ungroup() %>% 
+    mutate(share = 100 * n / sum(n)) %>% 
+    filter(winner=='Ben') %>% 
+    pull(share) %>% 
+    round(1)
+  
+  valueBox(value =  paste0(share,'%'), 
+           caption = 'Win Percentage (Ben)')  
+  
+})
+```
+
+### Ben's Point Differential {.value-box}
+
+```{r}
+
+flexdashboard::renderValueBox({
+  
+  diff <- updated_data() %>%
+    mutate(diff = ben_score - dylan_score) %>% 
+    #group_by(winner) %>% 
+    summarise(diff = sum(diff)) %>% 
+    pull(diff)
+  
+  sign <- ifelse(diff > 0 , '+',  '')
+
+  valueBox(value =  paste0(sign,diff), 
+           caption = 'Point Differential (Ben)')  
+  
+})
+
+```
+
+
+### Ben's Pythagorean Expectation {.value-box}
+
+```{r}
+
+flexdashboard::renderValueBox({
+agg <- updated_data() %>%
+    summarise(ben_score   = sum(ben_score),
+              dylan_score = sum(dylan_score))
+
+
+ratio <- round(100 * ((agg$ben_score ^ 2) / ((agg$ben_score ^ 2) + (agg$dylan_score ^ 2))  ),1)
+
+
+  valueBox(value =  paste0(ratio,'%'), 
+           caption = 'Pythagorean Win Expectation (Ben)')  
+
+})
+```
+
+
+Row
+-----------------------------------------------------------------------
+
+
+### Win Percentages
+
+```{r}
+renderHighchart({
+  d <- updated_data() %>% 
+  mutate(ben_wins = ben_score > dylan_score) %>% 
+  group_by(date) %>% 
+  summarise(games= n(), ben_wins = sum(ben_wins)) %>% 
+  mutate(daily_winrate = ben_wins / games,
+         cumulative_winrate = cumsum(ben_wins) / cumsum(games)) %>% 
+  select(date, contains('winrate'), games) %>% 
+  #gather(metric, value, -date) %>% 
+  mutate(daily_winrate=100*daily_winrate,
+         cumulative_winrate=100*cumulative_winrate)
+  
+  rows <- nrow(d)
+  
+  highchart() %>% 
+  hc_add_series(slice(d, c(3:rows)), 'line', hcaes(x=date, y=cumulative_winrate),
+         name = 'Cumulative Winrate',
+         zIndex=5,
+         dashStyle = c('Solid')) %>% 
+  # hc_add_series(d, 'point', hcaes(x=date,y=daily_winrate, size=games),
+  #               name = 'Daily Winrate',
+  #               #dashStyle = 'Dash',
+  #               marker = list(
+  #                 symbol = 'circle',
+  #                 maxSize='5%'
+  #               )) %>%
+  hc_add_theme(bwmisc::theme_ipsum()) %>% 
+  hc_yAxis(title=list(text='Win Percentage'),
+         #  max = 100,
+           plotLines = list(
+               list(#label = list(text = "This is a plotLine"),
+                    color = "#2d543d",
+                    dashStyle ='dot',
+                    width = 2,
+                    value = 50)
+             ),
+           labels=list(format='{value}%')) %>% 
+  hc_xAxis(type='datetime', title=list(text='Date')) %>% 
+  hc_title(text = "Win Percentages") %>% 
+  hc_subtitle(text = "Ben vs. Dylan") %>% 
+  hc_tooltip(formatter = JS("function(){
+                            return   this.series.name + '<br>' +
+                                    Highcharts.dateFormat('%b.%e', this.point.x) + '<br>' + 
+                                    Highcharts.numberFormat(this.point.y,1) + '%' + '<br>' + 
+                                    this.point.games
+  }")) %>% 
+    hc_chart(zoomType='x')
+
+})
+
+
+
+
+
+```
+
+### Point Differential
+
+```{r}
+
+renderHighchart({
+    dts <-  updated_data() %>% 
+    transmute(date, 
+              point_diff = ben_score - dylan_score,
+              csum_point_diff = cumsum(point_diff)) 
+  
+    dates <- unique(dts$date)
+    
+   
+  # TODO every time  
+data <- map_df(seq_along(dates), function(x){   
+      
+    pts <- pull(filter(dts, date == dates[x]), point_diff)
+    high <- max(pts) 
+    median <- median(pts)
+    low <- min(pts)
+   
+    tibble(
+      date =dates[x],
+      low = low ,
+      median = median,
+      high = high
+    )
+    })
+
+# TODO assume that this is sorted by time
+  csum_d <- dts %>% 
+  group_by(date) %>% 
+  filter(row_number() == max(row_number())) %>% 
+  select(date,  csum_point_diff) %>% 
+  ungroup() %>% 
+  arrange(date)
+    
+    highchart() %>% 
+    hc_add_series(data , 'columnrange' , hcaes(x=date, low = low, high = high ), color="#75b8d1",
+                  name = 'Range') %>% 
+    hc_add_series(csum_d, 'line', hcaes(x=date, y=csum_point_diff), 
+                  name = 'Cumulative Point Difference',
+                  zIndex=5,
+                  dashStyle='dash',
+                  color="#d175b8") %>% 
+    hc_xAxis(type = 'datetime') %>% 
+    hc_add_theme(bwmisc::theme_ipsum()) %>% 
+    hc_yAxis(title=list(text='Point Differential'),
+             plotLines = list(
+               list(#label = list(text = "This is a plotLine"),
+                    color = "#2d543d",
+                    dashStyle ='dot',
+                    width = 2,
+                    value = 0)
+             )) %>% 
+    hc_title(text = 'Point Differential by Day') %>% 
+    hc_subtitle(text = "Ben vs. Dylan")  %>% 
+    hc_chart(zoomType='x')
+}) 
+```
+
+
+
+Game Log
+=======================================================================
+
+Column {.sidebar}
+-----------------------------------------------------------------------
+
+### 
+
+```{r}
+numericInput(inputId = 'ben_score',label = 'Ben\'s Score',value = 0L, min = 0L, max = 100L, step = 1L)
+numericInput(inputId = 'dylan_score',label = 'Dylan\'s Score',value = 0L, min = 0L, max = 100L, step = 1L)
+actionButton(inputId = 'file_game', label = 'Record game')
+```
+
+Row 
+-----------------------------------------------------------------------
+
+
+```{r}
+DT::renderDataTable({
+updated_data() %>% 
+    DT::datatable(rownames = FALSE)
+})
+```
+
